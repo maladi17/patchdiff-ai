@@ -413,8 +413,8 @@ The agent discovers tools via three meta-tools:
 ```python
 list_tools()                         # tag overview
 list_tools(tag="search")             # tools tagged "search"
-describe_tool("decompile")           # JSON args schema + full description
-call_tool("decompile", {"addr": ...}) # invoke
+describe_tool("list_changed_functions")   # JSON args schema + full description
+call_tool("list_patch_store", {})         # invoke
 ```
 
 By default each `call_tool` invocation pauses with a `[y/N]` approval prompt
