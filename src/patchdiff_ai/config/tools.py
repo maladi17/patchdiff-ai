@@ -57,7 +57,6 @@ def _candidate_roots() -> list[Path]:
             Path(r"C:\Program Files (x86)"),
             Path("/opt"),
             Path("/Applications"),
-            Path.home(),
         ]
     )
 
@@ -69,7 +68,11 @@ def _explicit_env_candidates() -> list[Path]:
         if not value:
             continue
         path = Path(value)
-        out.extend([path, path.parent, path.parent.parent])
+        if path.name.lower().startswith("analyzeheadless"):
+            path = path.parent.parent
+        elif path.name.lower() == "support":
+            path = path.parent
+        out.append(path)
     return out
 
 

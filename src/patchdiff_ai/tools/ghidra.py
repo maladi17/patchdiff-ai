@@ -46,7 +46,7 @@ class GhidraTool:
         return target.parent / "__ghidra__"
 
     def project_name(self, target: Path) -> str:
-        digest = hashlib.sha1(str(target.resolve()).encode("utf-8")).hexdigest()[:10]
+        digest = hashlib.sha256(str(target.resolve()).encode("utf-8")).hexdigest()[:10]
         return f"{_sanitize(target.name)}_{digest}"
 
     def is_valid(self, job: GhidraJob) -> bool:

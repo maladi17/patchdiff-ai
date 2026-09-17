@@ -58,9 +58,11 @@ def make_nodes(ctx: AppContext):
                 targets_to_run=len(ran_targets),
                 targets_skipped=len(jobs) - len(ran_targets),
             )
-            await ctx.tools.ghidra.batch(
+            export_rcs = await ctx.tools.ghidra.batch(
                 jobs, condition=lambda j: j.target in ran_targets
             )
+            if any(rc != 0 for rc in export_rcs):
+                raise RuntimeError(f"Ghidra export failed with return codes: {export_rcs}")
 
         for src in (state.primary_file.path, state.secondary_file.path):
             be = Path(src + ".BinExport")
@@ -163,7 +165,11 @@ def make_nodes(ctx: AppContext):
                 secondary_unseen=len(secondary_funcs),
                 batched_jobs=len(jobs),
             )
-            await ctx.tools.ghidra.batch(jobs)
+            decompile_rcs = await ctx.tools.ghidra.batch(jobs)
+            if any(rc != 0 for rc in decompile_rcs):
+                raise RuntimeError(
+                    f"Ghidra decompile failed with return codes: {decompile_rcs}"
+                )
 
             sorted_changed = sorted(changed, key=lambda x: (x.similarity, -x.confidence))
             log.info(
