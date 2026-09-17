@@ -20,6 +20,15 @@ log = structlog.get_logger(__name__)
 
 
 def make_nodes(ctx: AppContext):
+    def needs_export(target: Path) -> bool:
+        export = target.with_name(target.name + ".BinExport")
+        if not export.exists():
+            return True
+        try:
+            return export.stat().st_mtime < target.stat().st_mtime
+        except OSError:
+            return True
+
     async def analyze(state: ReverseEngineeringState) -> dict[str, Any]:
         log.info("re_analyze_start", file=state.primary_file.name)
         run_start = time.time()
@@ -50,7 +59,7 @@ def make_nodes(ctx: AppContext):
             ran_targets = {
                 j.target
                 for j in jobs
-                if not j.target.with_name(j.target.name + ".BinExport").exists()
+                if needs_export(j.target)
             }
             log.trace(
                 "re_analyze_cache",

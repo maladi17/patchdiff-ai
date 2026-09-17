@@ -31,6 +31,8 @@ def _resolve_executable(root: Path) -> Path | None:
         Path("support") / "analyzeHeadless.bat",
         Path("support") / "analyzeHeadless",
         Path("support") / "analyzeHeadless.exe",
+        Path("Contents") / "Resources" / "ghidra" / "support" / "analyzeHeadless",
+        Path("Contents") / "Resources" / "ghidra" / "support" / "analyzeHeadless.bat",
     ):
         exe = root / rel
         if exe.is_file():
@@ -103,7 +105,14 @@ def discover_ghidra_installs() -> list[GhidraInstall]:
                 candidates.extend(
                     child
                     for child in base.iterdir()
-                    if child.is_dir() and child.name.lower().startswith("ghidra")
+                    if child.is_dir()
+                    and (
+                        child.name.lower().startswith("ghidra")
+                        or (
+                            child.suffix.lower() == ".app"
+                            and child.name.lower().startswith("ghidra")
+                        )
+                    )
                 )
             except OSError:
                 continue

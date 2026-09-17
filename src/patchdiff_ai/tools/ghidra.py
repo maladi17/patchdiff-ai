@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,9 +46,25 @@ class GhidraTool:
     def project_dir(self, target: Path) -> Path:
         return target.parent / "__ghidra__"
 
+    def install_root(self) -> Path:
+        parent = self.executable.resolve().parent
+        if parent.name == "support":
+            return parent.parent
+        return self.executable.resolve().parent
+
     def project_name(self, target: Path) -> str:
         digest = hashlib.sha256(str(target.resolve()).encode("utf-8")).hexdigest()[:10]
         return f"{_sanitize(target.name)}_{digest}"
+
+    def script_path(self, script: str) -> str:
+        paths = [str(_SCRIPTS_DIR)]
+        if script == "BinExport.java":
+            ext_root = self.install_root() / "Extensions"
+            if ext_root.is_dir():
+                for match in ext_root.rglob("BinExport.java"):
+                    paths.append(str(match.parent))
+                    break
+        return os.pathsep.join(dict.fromkeys(paths))
 
     def is_valid(self, job: GhidraJob) -> bool:
         if not self.executable.is_file():
@@ -75,7 +92,9 @@ class GhidraTool:
             self.project_name(target),
         ]
         argv.extend(["-import", str(target), "-overwrite"])
-        argv.extend(["-scriptPath", str(_SCRIPTS_DIR), "-postScript", job.script, *job.args])
+        argv.extend(
+            ["-scriptPath", self.script_path(job.script), "-postScript", job.script, *job.args]
+        )
 
         log.debug("ghidra_run", argv=argv)
         res = await run(argv, timeout=self.timeout, check=False)
