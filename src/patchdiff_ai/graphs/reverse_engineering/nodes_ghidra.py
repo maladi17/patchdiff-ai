@@ -96,9 +96,19 @@ def make_nodes(ctx: AppContext):
         return {}
 
     async def diff_and_decompile(state: ReverseEngineeringState) -> dict[str, Any]:
+        curr = Path(state.primary_file.path + ".BinExport")
+        prev = Path(state.secondary_file.path + ".BinExport")
+        if not curr.exists() or not prev.exists():
+            log.warning(
+                "bindiff_inputs_missing",
+                current_exists=curr.exists(),
+                previous_exists=prev.exists(),
+                current=str(curr),
+                previous=str(prev),
+            )
+            return {"artifacts": []}
+
         async with Timer("bindiff"):
-            curr = Path(state.primary_file.path + ".BinExport")
-            prev = Path(state.secondary_file.path + ".BinExport")
             out = Path(f"{state.primary_file.path}.{state.secondary_file.kb}.BinDiff")
             bd = await ctx.tools.bindiff.diff(curr, prev, out)
             if bd is None:

@@ -120,7 +120,7 @@ class GhidraTool:
         condition: Callable[[GhidraJob], bool] | None = None,
     ) -> list[int]:
         results: list[int] = []
-        remaining = list(jobs)
+        remaining = [j for j in jobs if (condition(j) if condition else True)]
         while remaining:
             current: list[GhidraJob] = []
             future: list[GhidraJob] = []
@@ -131,8 +131,7 @@ class GhidraTool:
                 else:
                     current.append(job)
                     seen.add(job.target)
-            picked = [j for j in current if (condition(j) if condition else True)]
-            tasks: list[Awaitable[int]] = [self.run_script(j) for j in picked]
+            tasks: list[Awaitable[int]] = [self.run_script(j) for j in current]
             if tasks:
                 results.extend(await asyncio.gather(*tasks))
             remaining = future
