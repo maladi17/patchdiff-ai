@@ -259,9 +259,10 @@ class WindowsProvider(PlatformProvider):
             click.echo(f"  Ghidra installs discovered: {versions}")
             click.echo(f"  Newest install: {installs[0].root}")
             click.echo(
-                "  Install the BinExport extension in Ghidra via "
-                "`File -> Install Extensions...`, then set TOOLS__GHIDRA to "
-                "the chosen install's `support/analyzeHeadless` path."
+                "  Install the `ghidra_BinExport.zip` release from google/binexport "
+                "so `BinExport.java` is present under the install's `Extensions/` tree "
+                "(GUI install or unpack into the Ghidra extensions location both work), "
+                "then set TOOLS__GHIDRA to the chosen install's `support/analyzeHeadless` path."
             )
 
         # WinSxS archives are too large to bundle and must be built locally.

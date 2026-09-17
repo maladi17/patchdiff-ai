@@ -85,7 +85,7 @@ def make_nodes(ctx: AppContext):
                         "`patchdiff-ai health-check`."
                     ),
                 )
-                continue
+                raise RuntimeError(f"Missing BinExport output: {be}")
             if Path(src) in ran_targets and be.stat().st_mtime < run_start:
                 log.error(
                     "binexport_stale_after_ghidra_failed",
@@ -103,6 +103,7 @@ def make_nodes(ctx: AppContext):
                         target=str(be),
                         error=str(exc),
                     )
+                raise RuntimeError(f"Stale BinExport output after Ghidra run: {be}")
         return {}
 
     async def diff_and_decompile(state: ReverseEngineeringState) -> dict[str, Any]:

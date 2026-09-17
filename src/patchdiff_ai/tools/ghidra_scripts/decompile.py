@@ -1,5 +1,6 @@
 from ghidra.app.decompiler import DecompInterface
 from ghidra.util.task import ConsoleTaskMonitor
+import os
 
 
 def _norm(token):
@@ -13,6 +14,8 @@ def main():
         raise RuntimeError("usage: decompile.py <out_dir> <ea> [<ea>...]")
 
     out_dir = args[0]
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
     monitor = ConsoleTaskMonitor()
     decompiler = DecompInterface()
     decompiler.openProgram(currentProgram)
