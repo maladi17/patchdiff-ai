@@ -33,7 +33,6 @@ class GhidraJob:
     script: str
     args: list[str] = field(default_factory=list)
     log: str | None = None
-    require_existing_project: bool = False
 
 
 class GhidraTool:
@@ -48,12 +47,7 @@ class GhidraTool:
 
     def project_name(self, target: Path) -> str:
         digest = hashlib.sha1(str(target.resolve()).encode("utf-8")).hexdigest()[:10]
-        return f"{_sanitize(target.stem)}_{digest}"
-
-    def project_exists(self, target: Path) -> bool:
-        project_dir = self.project_dir(target)
-        project_name = self.project_name(target)
-        return (project_dir / f"{project_name}.gpr").is_file()
+        return f"{_sanitize(target.name)}_{digest}"
 
     def is_valid(self, job: GhidraJob) -> bool:
         if not self.executable.is_file():
@@ -80,18 +74,7 @@ class GhidraTool:
             str(project_dir),
             self.project_name(target),
         ]
-        if job.require_existing_project:
-            if not self.project_exists(target):
-                log.error(
-                    "ghidra_project_missing",
-                    target=str(target),
-                    project_dir=str(project_dir),
-                    project_name=self.project_name(target),
-                )
-                return -1
-            argv.extend(["-process", target.name, "-noanalysis"])
-        else:
-            argv.extend(["-import", str(target), "-overwrite"])
+        argv.extend(["-import", str(target), "-overwrite"])
         argv.extend(["-scriptPath", str(_SCRIPTS_DIR), "-postScript", job.script, *job.args])
 
         log.debug("ghidra_run", argv=argv)

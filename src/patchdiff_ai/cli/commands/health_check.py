@@ -43,14 +43,10 @@ def health_check_command() -> None:
     avail = settings.tools.exists(ghidra_exe=ctx.tools.ghidra.executable)
     for k, v in avail.items():
         click.echo(f"  {k:24} = {'OK' if v else 'MISSING'}")
-    if avail.get("ghidra"):
-        click.echo(
-            "  ! BinExport Ghidra extension is required for binary export. "
-            "Install `ghidra_BinExport.zip` into Ghidra if exports fail."
-        )
 
     click.echo("\n== RE readiness ==")
     click.echo("  backend              = ghidra headless")
+    click.echo("  BinExport extension  = required for binary export (`ghidra_BinExport.zip`)")
     click.echo("  chat binary tools    = unavailable")
 
     click.echo("\n== Available models ==")

@@ -51,7 +51,6 @@ def make_nodes(ctx: AppContext):
                 j.target
                 for j in jobs
                 if not j.target.with_name(j.target.name + ".BinExport").exists()
-                or not ctx.tools.ghidra.project_exists(j.target)
             }
             log.trace(
                 "re_analyze_cache",
@@ -106,7 +105,10 @@ def make_nodes(ctx: AppContext):
                 current=str(curr),
                 previous=str(prev),
             )
-            return {"artifacts": []}
+            raise RuntimeError(
+                "Missing BinExport input(s) for BinDiff: "
+                f"{curr} exists={curr.exists()}, {prev} exists={prev.exists()}"
+            )
 
         async with Timer("bindiff"):
             out = Path(f"{state.primary_file.path}.{state.secondary_file.kb}.BinDiff")
@@ -148,7 +150,6 @@ def make_nodes(ctx: AppContext):
                                 ctx.settings.paths.logs_dir
                                 / f"{target.parent.name}.{target.name}.decompile.log"
                             ),
-                            require_existing_project=True,
                         )
                     )
 

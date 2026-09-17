@@ -46,13 +46,13 @@ def _parse_version(name: str) -> tuple[int, ...]:
 
 
 def _candidate_roots() -> list[Path]:
-    roots: list[Path] = []
-    for env in ("GHIDRA_INSTALL_DIR", "GHIDRA_HOME", "ProgramFiles", "ProgramFiles(x86)"):
-        value = os.environ.get(env)
-        if value:
-            roots.append(Path(value))
-    roots.extend(
+    return (
         [
+        Path(os.environ[env])
+        for env in ("ProgramFiles", "ProgramFiles(x86)")
+        if os.environ.get(env)
+        ]
+        + [
             Path(r"C:\Program Files"),
             Path(r"C:\Program Files (x86)"),
             Path("/opt"),
@@ -60,13 +60,34 @@ def _candidate_roots() -> list[Path]:
             Path.home(),
         ]
     )
-    return roots
+
+
+def _explicit_env_candidates() -> list[Path]:
+    out: list[Path] = []
+    for env in ("GHIDRA_INSTALL_DIR", "GHIDRA_HOME"):
+        value = os.environ.get(env)
+        if not value:
+            continue
+        path = Path(value)
+        out.extend([path, path.parent, path.parent.parent])
+    return out
 
 
 def discover_ghidra_installs() -> list[GhidraInstall]:
     """Return all discovered Ghidra installs sorted newest-first."""
 
     found: dict[Path, GhidraInstall] = {}
+    for root in _explicit_env_candidates():
+        exe = _resolve_executable(root)
+        if exe is None:
+            continue
+        resolved = root.resolve()
+        found[resolved] = GhidraInstall(
+            root=resolved,
+            version=_parse_version(root.name),
+            executable=exe,
+        )
+
     for base in _candidate_roots():
         if not base.exists():
             continue
