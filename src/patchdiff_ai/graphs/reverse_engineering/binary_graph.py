@@ -1,14 +1,7 @@
-"""Binary RE backend (PE / ELF / Mach-O via IDA + BinDiff).
+"""Binary RE backend (PE / ELF / Mach-O via Ghidra + BinDiff).
 
-One of N backends the M3 RE router (`router.py`) dispatches to. Picks
-between two `make_nodes` implementations at build time:
-
-  * idalib-backed (preferred) — drives idalib directly via `IdalibPool`.
-    Selected when `ctx.tools.idalib is not None`.
-  * idat-subprocess (legacy fallback) — spawns `idat.exe -A -S<script>`
-    per pair. Selected when idalib isn't activated (IDA 8.x setups).
-
-The two flows produce identical artefact shapes (`<binary>.BinExport`,
+One of N backends the M3 RE router (`router.py`) dispatches to.
+The Ghidra flow produces the same artefact shapes (`<binary>.BinExport`,
 `<primary>.<secondary_kb>.BinDiff`, `__funcs__/<ea>.c`) so VR is
 agnostic.
 """
@@ -20,7 +13,6 @@ from langgraph.types import RetryPolicy
 
 from patchdiff_ai.graphs.reverse_engineering.state import ReverseEngineeringState
 from patchdiff_ai.runtime.app_context import AppContext
-from patchdiff_ai.tools.idalib_pool import IdalibBinaryBusy
 
 
 class BinaryReNodes:
@@ -28,26 +20,18 @@ class BinaryReNodes:
     DIFF_AND_DECOMPILE = "Diff and decompile"
 
 
-# When the IDB sidecars are held by another live IDA process, the pool
-# raises `IdalibBinaryBusy`. LangGraph's retry policy yields the task
-# back to the scheduler — other CVEs run during the backoff window, and
-# this one re-runs once the holder releases. 10 attempts × up to 30s ≈
-# 5 min worst case before the CVE actually fails.
 _BUSY_RETRY = RetryPolicy(
     initial_interval=2.0,
     backoff_factor=2.0,
     max_interval=30.0,
     max_attempts=10,
-    retry_on=IdalibBinaryBusy,
+    retry_on=RuntimeError,
 )
 
 
 def build_binary_re_graph(ctx: AppContext):
-    """Build the binary RE subgraph for the configured IDA install."""
-    if ctx.tools.idalib is not None:
-        from patchdiff_ai.graphs.reverse_engineering.nodes_idalib import make_nodes
-    else:
-        from patchdiff_ai.graphs.reverse_engineering.nodes import make_nodes
+    """Build the binary RE subgraph for the configured Ghidra install."""
+    from patchdiff_ai.graphs.reverse_engineering.nodes_ghidra import make_nodes
 
     analyze, diff_and_decompile = make_nodes(ctx)
 

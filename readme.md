@@ -2,7 +2,7 @@
 
 > Turn a CVE ID into a binary-diff root-cause-analysis report. Fully automated:
 > Microsoft Security Update Guide → Update Catalog download → 7-Zip / `.cab` /
-> `.psf` extraction → forward / reverse delta apply → IDA Pro + BinDiff →
+> `.psf` extraction → forward / reverse delta apply → Ghidra + BinDiff →
 > per-function decompile → LLM-authored markdown RCA.
 
 Feed it `CVE-2025-29824`. Get back a markdown report that names the buggy
@@ -52,10 +52,9 @@ Given a single CVE (e.g. `CVE-2025-29824`) or a whole Patch Tuesday cycle
 5. **Picks candidates** — a platform-internals agent uses CVE metadata + vector
    search to rank the top suspects (similarity × LLM relevancy score). Optional
    interactive refinement via `--interrupt`.
-6. **Reverse engineers** each candidate: IDA Pro produces comparable
-   `.BinExport`s, BinDiff diffs them, changed functions are decompiled to C
-   (in-process via `idalib` when available, falling back to a headless `idat`
-   subprocess flow).
+6. **Reverse engineers** each candidate: Ghidra produces comparable
+   `.BinExport`s, BinDiff diffs them, and changed functions are decompiled to C
+   with headless Ghidra scripts.
 7. **Generates the report** — a vulnerability-research agent scores each
    changed function for security impact and asks an LLM (or a fan-out across
    eval models) to write the root-cause analysis.
@@ -86,9 +85,9 @@ patchdiff-ai init
 # then validate the install end-to-end
 patchdiff-ai health-check
 
-# Install the bundled IDA 9.3 plugins + idalib (needs admin)
-# Run from an elevated PowerShell prompt
-patchdiff-ai windows install
+# Install Ghidra separately, add the BinExport Ghidra extension, then
+# point tools.ghidra / TOOLS__GHIDRA at analyzeHeadless
+patchdiff-ai install
 
 # Run a single CVE
 patchdiff-ai cve CVE-2025-29824
@@ -110,18 +109,16 @@ python -m patchdiff_ai --help
 
 | Component   | Version                | Notes                                                                                                  |
 |-------------|------------------------|--------------------------------------------------------------------------------------------------------|
-| **Python**  | 3.11 x64               | Pinned `>=3.11`; idalib requires CPython matching the IDA build's Python version (3.11 for IDA 9.x).   |
-| **IDA Pro** | 8.0+ or 9.0+           | 9.3 is the preferred path — the bundled BinDiff/BinExport plugins are 9.3-pinned. 8.x works via the legacy `idat` subprocess flow. |
-| **idalib**  | bundled with IDA 9.0+  | In-process IDA via the `idapro` Python wrapper. ~5–10× faster RE than the subprocess flow.             |
-| **BinDiff** | 8.0                    | Bundled in `resources/bindiff_ida_9.3/` (ships in the wheel). Set `BINDIFF_PATH` to override.          |
-| **BinExport** | ≥ 12                 | Same bundle. The `bindiff8_ida64.dll` + `binexport12_ida64.dll` plugins are copied into IDA's `plugins/` dir by `patchdiff-ai windows install`. |
+| **Python**  | 3.11 x64               | Pinned `>=3.11`. |
+| **Ghidra**  | 11.x+                  | Must expose `support/analyzeHeadless` and have the BinExport extension installed. |
+| **BinDiff** | 8.0                    | Bundled in `resources/bindiff_ida_9.3/` (ships in the wheel). Set `BINDIFF_PATH` to override. |
+| **BinExport** | ≥ 12                 | Install the `ghidra_BinExport.zip` extension into Ghidra. |
 | **7-Zip**   | ≥ 22                   | Used for KB extraction. Default path: `C:\Program Files\7-Zip\7z.exe`; override via `TOOLS__SEVEN_ZIP`. |
 
 LLM access: **Azure OpenAI is the primary provider.** Anthropic and Gemini
 are supported as eval / fallback. See [Configuration](#configuration).
 
-> **Licensing.** IDA Pro is commercial. Bring a legal license or fork the
-> project to use Ghidra (PRs welcome).
+> **Licensing.** Ghidra is free. BinDiff/BinExport still carry their own licenses.
 
 ---
 
@@ -133,9 +130,9 @@ are supported as eval / fallback. See [Configuration](#configuration).
 pip install git+https://github.com/akamai/patchdiff-ai
 ```
 
-The wheel ships the bundled BinDiff/BinExport DLLs (~9.5 MB) under
-`patchdiff_ai/_resources/bindiff_ida_9.3/` so `patchdiff-ai windows install`
-can copy them into your IDA 9.3 `plugins/` folder without extra downloads.
+The wheel ships the bundled `bindiff.exe` assets under
+`patchdiff_ai/_resources/bindiff_ida_9.3/` so BinDiff stays available without
+an extra install.
 
 ### From source (for development)
 
@@ -152,26 +149,19 @@ pip install -e .
 In editable mode the runtime resolver finds the bundled DLLs at
 `<repo>/resources/bindiff_ida_9.3/` instead — same files, no copy needed.
 
-### Bootstrapping IDA-side prerequisites
+### Bootstrapping Ghidra-side prerequisites
 
 ```powershell
-# Run from an elevated PowerShell prompt — the steps below write into
-# C:\Program Files\IDA *.
-patchdiff-ai windows install
+# Install Ghidra, then use Ghidra's GUI to install the BinExport extension.
+# Finally point tools.ghidra / TOOLS__GHIDRA at support/analyzeHeadless.
+patchdiff-ai install
 ```
 
 What it does:
 
-1. Warns if the current shell isn't elevated.
-2. Discovers every IDA install under `Program Files`.
-3. Installs the `idapro` wheel from the **newest** install's
-   `<ida_root>/idalib/python/` and runs `py-activate-idalib.py`.
-4. Copies `bindiff.exe`, `bindiff8_ida64.dll`, `binexport12_ida64.dll` from
-   the bundled `bindiff_ida_9.3/` into the **IDA 9.3** install's `plugins/`
-   folder. Idempotent (skips files whose contents already match).
-
-The bundled DLLs are pinned to IDA 9.3's SDK ABI; the install command
-refuses to copy them into 8.x or 9.0 because they wouldn't load.
+1. Discovers local Ghidra installs.
+2. Prints the path you should point `tools.ghidra` at.
+3. Reminds you to install the `ghidra_BinExport.zip` extension in Ghidra.
 
 ### Adding a Windows version
 
@@ -265,13 +255,13 @@ Defaults are in [src/patchdiff_ai/llm/catalog.py](src/patchdiff_ai/llm/catalog.p
 {
   "tools": {
     "seven_zip": "C:/Program Files/7-Zip/7z.exe",
-    "ida": "C:/Program Files/IDA Professional 9.3/idat.exe"
+    "ghidra": "C:/ghidra/support/analyzeHeadless.bat"
   }
 }
 ```
 
-When `tools.ida` is unset (or `null`), the runtime auto-discovers installs
-and picks the newest one with `idalib`.
+When `tools.ghidra` is unset (or `null`), the runtime auto-discovers local
+Ghidra installs and picks the newest one.
 
 ### Filesystem layout
 
@@ -304,7 +294,7 @@ folder elsewhere — e.g. put `db_dir` on a fast SSD:
   "concurrency": {
     "cve_workers": 12,         // parallel CVEs in a batch run
     "kb_downloads": 6,         // concurrent multi-GB MS Update streams
-    "re_workers": 12,          // idalib worker processes
+    "re_workers": 12,          // candidate RE tasks / headless Ghidra jobs
     "extractor_workers": 5,    // 7-Zip/PSF extraction workers per KB
     "file_info_semaphore": 500,  // cap on concurrent gather-stage LLM calls
     "llm_eval_parallel": 4     // parallel report generation in --eval mode
@@ -354,11 +344,11 @@ Common flags (every CVE-running command accepts these):
 patchdiff-ai windows cve CVE-2025-29824 --platform-id 12390   # force a specific MSRC product ID
 patchdiff-ai windows month 2026-Apr --platform-id 12390       # whole Patch Tuesday cycle, parallel
 patchdiff-ai windows health-check                             # Windows-side prereq probe
-patchdiff-ai windows install                                  # idalib + IDA 9.3 plugins (needs admin)
+patchdiff-ai install                                          # show Ghidra + BinExport setup guidance
 ```
 
 A `month` run executes every matching CVE in parallel inside one process —
-sharing the idalib pool, model registry, and Chroma stores. Tune the fan-out
+sharing the model registry and Chroma stores. Tune the fan-out
 via `CONCURRENCY__CVE_WORKERS`.
 
 ### Cached reports
@@ -385,7 +375,7 @@ colourised renderer in TTYs.
 
 Bare `patchdiff-ai` (or `patchdiff-ai --chat` / `--chat-permissive`) drops
 straight into the chat REPL with no CVE bound — useful for browsing cached
-reports, querying Chroma, or driving the IDA tools directly.
+reports, querying Chroma, or browsing extracted patch artifacts.
 
 ---
 
@@ -414,12 +404,9 @@ hybrid catalogue:
 - ~10 **native tools** in this repo: `show_report`, `search_reports`,
   `chroma_query`, `list_patch_store`, `read_dataframe`, BinDiff inspectors,
   Python sandbox, etc.
-- ~80 **idalib tools** proxied through the bundled
-  [`ida-pro-mcp`](https://github.com/mrexodia/ida-pro-mcp) — function
-  listings, decompile, xrefs, callgraphs, byte search, type queries, etc.
-  Mutating tools (`patch*`), Python execution (`py_eval`), and debugger
-  control (`dbg_*`) are stripped from the catalogue. The IDA worker is
-  lazy-spawned on first use.
+- The artifact-bound tools operate on saved `.BinExport`, `.BinDiff`, and
+  decompiled `__funcs__/*.c` outputs. There is no live disassembler bridge in
+  the chat REPL.
 
 The agent discovers tools via three meta-tools:
 
@@ -467,9 +454,9 @@ A `windows month` run is the big lever. Key knobs:
 
 | Knob                              | Default | Effect                                                                                       |
 |-----------------------------------|--------:|----------------------------------------------------------------------------------------------|
-| `CONCURRENCY__CVE_WORKERS`        |     12  | CVEs running in parallel inside one batch invocation. Each shares the idalib pool + LLM deployment. |
+| `CONCURRENCY__CVE_WORKERS`        |     12  | CVEs running in parallel inside one batch invocation. Each shares the LLM deployment. |
 | `CONCURRENCY__KB_DOWNLOADS`       |      6  | Concurrent multi-GB streams from the MS Update Catalog. Same-KB CVEs already coalesce on a per-path lock — this only matters for cross-version batches. |
-| `CONCURRENCY__RE_WORKERS`         |     12  | `idalib` worker processes in the pool. Sized for the IDA SDK + Hex-Rays GIL pinning.         |
+| `CONCURRENCY__RE_WORKERS`         |     12  | Candidate RE tasks / headless Ghidra jobs. |
 | `CONCURRENCY__EXTRACTOR_WORKERS`  |      5  | Async workers per `extract_kb` invocation (7-Zip + PSF + delta apply).                       |
 | `CONCURRENCY__FILE_INFO_SEMAPHORE`|    500  | Cap on concurrent gather-stage LLM calls (file descriptions). Tune below your Azure deployment's per-minute rate limit. |
 | `CONCURRENCY__LLM_EVAL_PARALLEL`  |      4  | Parallel report generation in `--eval` mode.                                                 |
@@ -631,7 +618,7 @@ patchdiff-ai/
 │   ├── Pipeline.png
 │   └── ChatAgent.png
 ├── resources/                            # bundled assets (projected into the wheel)
-│   ├── bindiff_ida_9.3/                  # BinDiff + IDA 9.3 plugins
+│   ├── bindiff_ida_9.3/                  # bundled BinDiff assets
 │   ├── UpdateCompression.dll             # delta-apply DLL baseline
 │   └── prerequisites.md                  # manual-download checklist
 ├── src/patchdiff_ai/
@@ -662,18 +649,13 @@ patchdiff-ai/
 
 ## Troubleshooting
 
-**`patchdiff-ai windows install` fails with permission errors.**
-You're not running elevated. The wheel install + plugin copy both write
-into `C:\Program Files\IDA *`. Re-run from an elevated PowerShell.
+**`No Ghidra install discovered`.**
+Either install Ghidra under a common location, or set `tools.ghidra` in
+`config.json` (or `TOOLS__GHIDRA=C:/path/to/analyzeHeadless.bat` in env).
 
-**`No IDA install discovered under Program Files`.**
-Either install IDA Pro under one of `Program Files` / `Program Files (x86)`,
-or set `tools.ida` in `config.json` (or `TOOLS__IDA=C:/path/to/idat.exe` in env).
-
-**`No IDA 9.3 install found` — plugins skipped.**
-The bundled BinDiff/BinExport DLLs are pinned to 9.3's SDK ABI and won't
-load into 8.x or 9.0. Either install IDA 9.3, or bring your own
-plugins built against your IDA version.
+**BinExport export fails in Ghidra.**
+Install the `ghidra_BinExport.zip` extension in Ghidra and re-run
+`patchdiff-ai health-check`.
 
 **Long tail latency on a `windows month` run.**
 Almost always Azure OpenAI deployment throttling. The system retries with
@@ -693,10 +675,6 @@ worked and your account has `Cognitive Services User` on the resource.
 ---
 
 ## License
-
-**`patchdiff-ai windows install` fails with permission errors.**
-You're not running elevated. The wheel install + plugin copy both write
-into `C:\Program Files\IDA *`. Re-run from an elevated PowerShell.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
 

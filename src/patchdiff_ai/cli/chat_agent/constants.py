@@ -4,15 +4,12 @@ from __future__ import annotations
 
 
 # Surfaced when a CVE_INFO cache hit dispatched no artifacts so binary-level
-# tools have nothing to read; routes the agent to live-IDA instead.
+# tools have nothing to read.
 _NO_ARTIFACTS_HINT = (
     "No patch-diff artifacts in this chat session (the run was "
     "served from the report cache, so no per-function diff state "
-    "was produced). For binary-level questions, use the live-IDA "
-    "tools instead: call_tool(\"list_patch_store\", {}) to find the "
-    "binary path, call_tool(\"idalib_open\", {\"input_path\": <path>}) "
-    "to load it, then list_funcs / lookup_funcs / decompile / "
-    "xrefs_to / survey_binary as needed."
+    "was produced). Re-run the CVE locally to regenerate reverse-"
+    "engineering artifacts before asking binary-level questions."
 )
 
 

@@ -23,7 +23,7 @@ from patchdiff_ai.platforms import providers
     help="patchdiff-ai — security-update RCA across platforms.\n\n"
          "Bare `patchdiff-ai` (or `patchdiff-ai --chat[-permissive]`) drops "
          "into the REPL with no CVE bound — useful for browsing cached "
-         "reports, querying Chroma, or driving the IDA tools directly.",
+         "reports, querying Chroma, or browsing extracted patch artifacts.",
     context_settings={"help_option_names": ["-h", "--help"]},
     invoke_without_command=True,
 )

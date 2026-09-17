@@ -3,7 +3,7 @@
 Both the root `cve` command (after NVD auto-detect) and each provider's
 `cve` sub-command (after explicit resolve) call into `run_single_cve`.
 Batch commands (e.g. `windows month`) call `run_batch_cves` so AppContext
-+ progress reporter + IdalibPool are built once, not once per CVE.
++ progress reporter are built once, not once per CVE.
 """
 
 from __future__ import annotations
@@ -91,10 +91,10 @@ def run_chat_only(*, permissive: bool = False) -> None:
     """Drop straight into the REPL without a prior CVE run.
 
     Builds an `AppContext` (so the chat agent has access to the model
-    registry, vector stores, and `ida_chat` worker), then calls
+    registry and vector stores), then calls
     `run_chat` with `cve=""` / `state=None`. The reanalyze REPL command
     no-ops in this mode (it requires a bound CVE + platform); cross-CVE
-    tools (`search_reports`, `chroma_query`, IDA, patch-store) all work.
+    tools (`search_reports`, `chroma_query`, patch-store) all work.
     """
     settings = get_settings()
     settings.paths.ensure()

@@ -153,7 +153,7 @@ A single `patchdiff-ai` invocation is one OS process. Inside it:
   (Chroma writes, sync HTTP via `requests-html`, `BinDiff.from_binexport_files`) is
   pushed onto the default thread-pool via `asyncio.to_thread` or
   `loop.run_in_executor`.
-- **External tools** (`7z.exe`, `idat64.exe`) run as child processes through
+- **External tools** (`7z.exe`, `analyzeHeadless`) run as child processes through
   `asyncio.create_subprocess_exec`. They are timeout-bounded; on cancellation the
   process is `terminate()`-then-`kill()`ed.
 - **Vector stores** are local Chroma collections persisted to `db/`.
@@ -320,44 +320,30 @@ Every tool wrapper is async, list-arg, timeout-bound, and built on
 | [`process.py`](../src/patchdiff_ai/tools/process.py)                         | `run(args, *, timeout, ...)` — `create_subprocess_exec`, kill on timeout, `ToolError` / `ToolTimeout`    |
 | [`seven_zip.py`](../src/patchdiff_ai/tools/seven_zip.py)                     | `SevenZipTool.list_files(...)` / `extract_by_list(...)` — reads supported extensions from `7z i`         |
 | [`psf.py`](../src/patchdiff_ai/tools/psf.py)                                 | `PsfArchive` — async ctx mgr; mmap **closed** on exit (legacy leak fixed)                                |
-| [`ida.py`](../src/patchdiff_ai/tools/ida.py)                                 | `IdaTool.run_script(IdaJob)` — `-S<script>` arg via `subprocess.list2cmdline`; `batch()` dedupes targets |
-| [`ida_mcp.py`](../src/patchdiff_ai/tools/ida_mcp.py)                         | `IdaMcpService` — chat-only ida-pro-mcp wrapper; `get_catalogue()` (no spawn) + `call_tool(name, args)` (lazy spawn). Used by the chat tool catalogue. |
-| [`idalib_pool.py`](../src/patchdiff_ai/tools/idalib_pool.py)                 | `IdalibPool` — N-worker `multiprocessing.spawn` pool driving idalib directly. Used by the RE pipeline (no MCP overhead). `None` when idalib isn't activated. |
-| [`_subprocess_lifecycle.py`](../src/patchdiff_ai/tools/_subprocess_lifecycle.py) | Shared atexit-killed PID registry + port helpers + terminate dance; used by both `idalib_pool` and `ida_mcp`. |
+| [`ghidra.py`](../src/patchdiff_ai/tools/ghidra.py)                           | `GhidraTool.run_script(GhidraJob)` — drives `analyzeHeadless` with bundled scripts; `batch()` dedupes targets |
 | [`bindiff.py`](../src/patchdiff_ai/tools/bindiff.py)                         | `BindiffTool.diff(...)` — one bounded retry on sqlite corruption (override=True), no infinite loop       |
 | [`delta.py`](../src/patchdiff_ai/tools/delta.py)                             | `DeltaApi` — instance-scoped ctypes loader for `UpdateCompression.dll`; DLLs stay mapped until process exit (FreeLibrary mid-shutdown crashed Py_Finalize) |
 | [`manifest.py`](../src/patchdiff_ai/tools/manifest.py)                       | `WcpManifestExtractor` — guarded `string_at` for WCP manifest decoding                                   |
-| [`idapython/`](../src/patchdiff_ai/tools/idapython/)                         | `analyze.py` and `decompile.py` — legacy IDA-side scripts invoked via `idat64.exe -A -S<script>` (8.x fallback) |
+| [`ghidra_scripts/`](../src/patchdiff_ai/tools/ghidra_scripts/)               | Headless Ghidra scripts for decompilation and related automation                                          |
 
 Conventions:
 
 - Executable paths come from `Settings.tools` — no hardcoded `'C:/Program Files/...'`.
-  When `tools.ida` isn't set, [`config/tools.py`](../src/patchdiff_ai/config/tools.py)
-  discovers all installs under `Program Files` (recognising `IDA Pro 8.x`,
-  `IDA Professional 9.x`) and picks the newest. `idat.exe` (9.3+) and
-  `idat64.exe` (8.x / 9.0) are both supported.
+  When `tools.ghidra` isn't set, [`config/tools.py`](../src/patchdiff_ai/config/tools.py)
+  discovers local Ghidra installs and picks the newest `analyzeHeadless`.
 - `SevenZipTool` is **never** invoked with `shell=True`.
-- `IdaTool.batch` deduplicates jobs by target path because IDA cannot share an `.i64`
-  file across concurrent processes.
-- `IdaJob.args` is escaped via `subprocess.list2cmdline` exactly once before being
-  passed in `-S`.
+- `GhidraTool.batch` deduplicates jobs by target path because one Ghidra project
+  owns one imported binary.
 - `BindiffTool.diff` retries once on `sqlite3.DatabaseError`. Two failures in a row
   return `None`; the RE pipeline treats that as "skip this candidate". The
   bundled `bindiff.exe` ships under [`resources/bindiff_ida_9.3/`](../resources/bindiff_ida_9.3/)
   and is wired in via `BINDIFF_PATH` (set in `AppContext.build()`), so users
   don't need a separate BinDiff install.
-- The chat agent uses a **hybrid tool catalogue** ([`cli/chat_agent.py`](../src/patchdiff_ai/cli/chat_agent.py)):
-  3 always-on native tools (`list_changed_functions`, `show_decompiled`,
-  `show_diff`) + 3 meta-tools (`list_tools`, `describe_tool`, `call_tool`)
-  proxy everything else (report queries, reanalyze, all 60+ ida-pro-mcp
-  tools). The `idalib-mcp` subprocess only spawns on the first
-  `call_tool(<ida tool>, ...)` — chat sessions that never touch live IDA
-  pay zero spawn cost. Catalogue snapshot is built without spawning by
-  importing `ida_pro_mcp.ida_mcp` and walking the in-process `@tool`
-  registry.
-- The RE pipeline drives idalib through `IdalibPool` directly (no MCP
-  overhead) when the resolved IDA is 9.0+ with idalib activated; 8.x
-  setups keep using the legacy subprocess flow.
+- The chat agent keeps the artifact-bound tools (`list_changed_functions`,
+  `show_decompiled`, `show_diff`) plus report/query helpers; there is no live
+  Ghidra session bridge.
+- The RE pipeline drives headless Ghidra directly and preserves the existing
+  BinExport/BinDiff/`__funcs__` artifact contract.
 
 ### 6. Patches pipeline ([`src/patchdiff_ai/patches/`](../src/patchdiff_ai/patches/))
 
@@ -531,23 +517,15 @@ backends today, both produce the same `Artifact` / `FunctionMatchRef`
 shape so VR is agnostic:
 
 - **Binary backend** ([`binary_graph.py`](../src/patchdiff_ai/graphs/reverse_engineering/binary_graph.py))
-  — IDA + BinDiff + Hex-Rays decompile. Selected for `RECategory.BINARY`
+  — Ghidra + BinDiff + headless decompile. Selected for `RECategory.BINARY`
   (Windows always; Linux when the candidate ends in `.so`/`.dylib`/
-  `.exe`/...). Picks between two `make_nodes` implementations at build
-  time based on `ctx.tools.idalib`:
-  - **idalib-backed** (preferred, [`nodes_idalib.py`](../src/patchdiff_ai/graphs/reverse_engineering/nodes_idalib.py))
-    — drives idalib directly through `IdalibPool`. No subprocess per
-    pair, warm IDB cache reuse, batched Hex-Rays decompile in one
-    round-trip. Selected when `ctx.tools.idalib is not None`
-    (IDA 9.0+ with idalib activated).
-  - **idat-subprocess legacy** ([`nodes.py`](../src/patchdiff_ai/graphs/reverse_engineering/nodes.py))
-    — fallback for 8.x setups. Spawns `idat.exe -A -S<analyze.py>`
-    then `-S<decompile.py>` (batched 500 funcs per `.i64`). The IDA-side
-    script explicitly `idc.save_database("", 0)`s before `qexit` so
-    the `.i64` survives the run.
+  `.exe`/...). The backend uses [`nodes_ghidra.py`](../src/patchdiff_ai/graphs/reverse_engineering/nodes_ghidra.py)
+  to invoke `analyzeHeadless`, export `.BinExport` files through the Ghidra
+  BinExport extension, then decompile changed functions into `__funcs__/*.c`
+  through a bundled Ghidra script.
 
   Topology: `ANALYZE → DIFF_AND_DECOMPILE → END`. Shared helpers
-  (`discover_parents`, `hexish`, `decompile_set_via_idalib`) live in
+  (`discover_parents`, `hexish`) live in
   [`_shared.py`](../src/patchdiff_ai/graphs/reverse_engineering/_shared.py).
 
 - **Source backend** ([`source_graph.py`](../src/patchdiff_ai/graphs/reverse_engineering/source_graph.py))

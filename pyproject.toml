@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "patchdiff-ai"
 version = "2.0.16"
-description = "Turn a CVE ID into a binary-diff root-cause-analysis report — MSRC patches, IDA Pro + BinDiff, LLM-driven RE."
+description = "Turn a CVE ID into a binary-diff root-cause-analysis report — MSRC patches, Ghidra + BinDiff, LLM-driven RE."
 readme = "readme.md"
 requires-python = ">=3.11"
 keywords = [
@@ -14,7 +14,7 @@ keywords = [
     "reverse-engineering",
     "patch-diff",
     "binary-diff",
-    "ida-pro",
+    "ghidra",
     "bindiff",
     "msrc",
     "cve",
@@ -53,12 +53,6 @@ dependencies = [
     "langchain-openai==1.2.1",
     "langgraph==1.1.10",
     "langgraph-checkpoint==4.0.3",
-    # IDA Pro MCP — drives idalib in a headless subprocess; pulled from GitHub
-    # because there's no PyPI package. Pinned to a specific commit so reinstalls
-    # are deterministic; bump the SHA deliberately when upgrading.
-    # `mcp` (the SDK + streamable-http transport) comes transitively through
-    # this dependency — no need to pin separately.
-    "ida-pro-mcp @ git+https://github.com/mrexodia/ida-pro-mcp.git@40e94f36f94043fd1824661e32ad72a903ec9e2f",
     "lxml_html_clean==0.4.4",
     "pefile==2024.8.26",
     "polars==1.40.1",
@@ -79,8 +73,7 @@ dependencies = [
 patchdiff-ai = "patchdiff_ai.cli.app:main"
 
 [tool.hatch.metadata]
-# `ida-pro-mcp` is sourced from GitHub (no PyPI release). Direct refs are
-# rejected by default; enable explicitly so editable installs work.
+# Keep direct-reference support enabled for future optional VCS-sourced deps.
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]

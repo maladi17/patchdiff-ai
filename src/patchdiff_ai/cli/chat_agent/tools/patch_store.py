@@ -1,4 +1,4 @@
-"""`list_patch_store` — discoverable handle for binaries available to idalib_open."""
+"""`list_patch_store` — discoverable handle for extracted binaries."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def register(cat: ToolCatalogue, ctx: AppContext) -> None:
     allowed = _enumerate_patch_store(ctx)
 
     def list_patch_store() -> str:
-        """List binaries available for live idalib analysis."""
+        """List binaries available under patch_store."""
         if not allowed:
             return (
                 "patch_store is empty. Run `patchdiff-ai cve <CVE>` first "
@@ -46,7 +46,7 @@ def register(cat: ToolCatalogue, ctx: AppContext) -> None:
 
     cat.register_native(
         "list_patch_store",
-        "List binaries under db/patch_store/ — pass an absolute path to idalib_open.",
+        "List binaries under db/patch_store/.",
         {"type": "object", "properties": {}, "required": []},
         list_patch_store,
         tags=["data", "binary"],

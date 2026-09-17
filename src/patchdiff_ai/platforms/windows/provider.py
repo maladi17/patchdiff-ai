@@ -232,94 +232,37 @@ class WindowsProvider(PlatformProvider):
         return ok
 
     def install(self) -> None:
-        """Install Windows-side prerequisites: idalib + IDA 9.3 plugins.
+        """Print Windows-side prerequisites for the Ghidra backend.
 
         Driven from this provider so `patchdiff-ai install` (no
         subcommand) does the right thing on Windows in one call. Steps:
 
-        1. Warn if not running elevated. The `plugins/` copy and the
-           `pip install` against `idalib/python/` both target paths
-           under `C:\\Program Files\\` and will fail without admin.
-        2. If any discovered IDA install ships idalib (>= 9.0), run the
-           `idalib` install against the newest such install. Skips
-           cleanly when no idalib-capable install exists.
-        3. If an IDA 9.3 install is present, copy the bundled
-           BinDiff / BinExport DLLs from `resources/bindiff_ida_9.3/`
-           into its `plugins/` folder. The bundled DLLs are pinned to
-           IDA 9.3's SDK ABI; copying them into 8.x or 9.0 would just
-           produce a non-loadable plugin, so we refuse and tell the
-           user to install IDA 9.3.
+        1. Discover Ghidra installs so the user can choose one.
+        2. Remind the user to install the BinExport Ghidra extension.
+        3. Remind the user where to point `tools.ghidra`.
 
         WinSxS archives still need to be built locally via
         `patchdiff-ai windows index ...` — too large to bundle.
         """
-        from patchdiff_ai.cli.commands.install import (
-            BUNDLED_PLUGIN_IDA_VERSION,
-            do_install_ida_plugins,
-            do_install_idalib,
-            is_admin,
-        )
-        from patchdiff_ai.config.tools import discover_ida_installs
+        from patchdiff_ai.config.tools import discover_ghidra_installs
 
-        if not is_admin():
-            click.echo(
-                "  [!] Not running as administrator. Writing into "
-                "`C:\\Program Files\\IDA *` (idalib wheel install + plugin "
-                "copy) likely needs elevation. Re-run this command from an "
-                "elevated PowerShell / Command Prompt if the steps below "
-                "fail with a permission error."
-            )
-
-        installs = discover_ida_installs()
+        installs = discover_ghidra_installs()
         if not installs:
             click.echo(
-                "  [!] No IDA install discovered under Program Files. "
-                "Skipping IDA-side steps."
+                "  [!] No Ghidra install discovered. Install Ghidra and point "
+                "TOOLS__GHIDRA at support/analyzeHeadless(.bat)."
             )
         else:
-            ida_versions = ", ".join(f"{i.version[0]}.{i.version[1]}" for i in installs)
-            click.echo(f"  IDA installs discovered: {ida_versions}")
-
-            # ---- idalib (any 9.0+ install that ships it) ------------------
-            idalib_capable = [i for i in installs if i.has_idalib]
-            if idalib_capable:
-                # `discover_ida_installs` already sorts newest-first.
-                target = idalib_capable[0]
-                click.echo(
-                    f"\n  --- idalib (target: IDA {target.version[0]}."
-                    f"{target.version[1]} at {target.root}) ---"
-                )
-                try:
-                    do_install_idalib(target)
-                except click.exceptions.Exit as exc:
-                    click.echo(f"  [!] idalib install exited with rc={exc.exit_code}")
-                except click.BadParameter as exc:
-                    click.echo(f"  [!] idalib install skipped: {exc}")
-            else:
-                click.echo(
-                    "  [!] No idalib-capable IDA install (need 9.0+). "
-                    "Skipping idalib step."
-                )
-
-            # ---- IDA 9.3 plugins (bundled DLLs are 9.3-only) --------------
-            wanted = BUNDLED_PLUGIN_IDA_VERSION
-            ida_93 = next((i for i in installs if i.version == wanted), None)
-            click.echo(f"\n  --- ida-plugins (target: IDA {wanted[0]}.{wanted[1]}) ---")
-            if ida_93 is None:
-                click.echo(
-                    f"  [!] No IDA {wanted[0]}.{wanted[1]} install found. "
-                    "The bundled BinDiff / BinExport DLLs in "
-                    "`resources/bindiff_ida_9.3/` are pinned to IDA 9.3's "
-                    "SDK ABI and won't load into other minors — skipping."
-                )
-            else:
-                click.echo(f"  Target install: {ida_93.root}")
-                try:
-                    do_install_ida_plugins(ida_93)
-                except click.exceptions.Exit as exc:
-                    click.echo(f"  [!] ida-plugins install exited with rc={exc.exit_code}")
-                except click.BadParameter as exc:
-                    click.echo(f"  [!] ida-plugins install skipped: {exc}")
+            versions = ", ".join(
+                ".".join(str(x) for x in i.version if x) or "unknown" for i in installs
+            )
+            click.echo(f"  Ghidra installs discovered: {versions}")
+            click.echo(f"  Newest install: {installs[0].root}")
+            click.echo(
+                "  Install the BinExport extension in Ghidra via "
+                "`File -> Install Extensions...`, then set TOOLS__GHIDRA to "
+                "the chosen install's `support/analyzeHeadless` path."
+            )
 
         # WinSxS archives are too large to bundle and must be built locally.
         click.echo(
