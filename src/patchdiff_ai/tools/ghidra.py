@@ -80,7 +80,15 @@ class GhidraTool:
             str(project_dir),
             self.project_name(target),
         ]
-        if job.require_existing_project and self.project_exists(target):
+        if job.require_existing_project:
+            if not self.project_exists(target):
+                log.error(
+                    "ghidra_project_missing",
+                    target=str(target),
+                    project_dir=str(project_dir),
+                    project_name=self.project_name(target),
+                )
+                return -1
             argv.extend(["-process", target.name, "-noanalysis"])
         else:
             argv.extend(["-import", str(target), "-overwrite"])

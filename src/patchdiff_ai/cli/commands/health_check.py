@@ -70,14 +70,10 @@ def health_check_command() -> None:
         except Exception as exc:
             click.echo(f"  7-Zip launch         = FAILED ({exc})")
         try:
-            res = await run(
-                [str(ctx.tools.ghidra.executable)],
-                timeout=10,
-                check=False,
-            )
-            click.echo(f"  Ghidra launch        = OK (rc={res.returncode})")
+            status = "OK" if ctx.tools.ghidra.executable.is_file() else "MISSING"
+            click.echo(f"  Ghidra executable    = {status}")
         except Exception as exc:
-            click.echo(f"  Ghidra launch        = FAILED ({exc})")
+            click.echo(f"  Ghidra executable    = FAILED ({exc})")
 
     click.echo("\n== Tool smoke ==")
     asyncio.run(smoke())

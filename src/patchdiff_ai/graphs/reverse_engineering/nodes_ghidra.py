@@ -36,7 +36,6 @@ def make_nodes(ctx: AppContext):
                         "Prepend Namespace to Function Names",
                     ],
                     log=str(logs_dir / f"{prim.parent.name}.{prim.name}.analyze.log"),
-                    require_existing_project=True,
                 ),
                 GhidraJob(
                     target=sec,
@@ -46,7 +45,6 @@ def make_nodes(ctx: AppContext):
                         "Prepend Namespace to Function Names",
                     ],
                     log=str(logs_dir / f"{sec.parent.name}.{sec.name}.analyze.log"),
-                    require_existing_project=True,
                 ),
             ]
             ran_targets = {
@@ -171,7 +169,7 @@ def make_nodes(ctx: AppContext):
                     similarity=m.similarity,
                     confidence=m.confidence,
                     parents=next(
-                        discover_parents(bd.secondary.get(m.address1)),
+                        discover_parents(bd.secondary.get(m.address2)),
                         None,
                     ),
                 )
